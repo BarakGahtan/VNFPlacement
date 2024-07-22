@@ -26,8 +26,8 @@ class Parser(object):
         parser_.add_argument('-k', '--demanded_func', default=2, type=int, help='number of functions')
         parser_.add_argument('-f', '--possible_func', default=5,  type=int, help='number of functions')
         parser_.add_argument('-n', '--clients_cnt', default=500,  type=int, help='number of clients')
-        parser_.add_argument('-w', '--w1', default=10, type=int, help='lower limit for weights range')
-        parser_.add_argument('-ww', '--w2', default=50, type=int, help='upper limit for weights range')
+        parser_.add_argument('-w', '--w1', default=5, type=int, help='lower limit for weights range')
+        parser_.add_argument('-ww', '--w2', default=20, type=int, help='upper limit for weights range')
         parser_.add_argument('-r', '--radius', default=15, type=int, help='upper limit for weights range')
         args = parser_.parse_args()
         return args

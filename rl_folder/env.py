@@ -2,7 +2,9 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from matplotlib import pyplot as plt
-from utils.utils_functions import calculate_radius
+from utils1.utils_functions import calculate_radius
+
+
 class FunctionPlacementEnv(gym.Env):
     def __init__(self, num_servers, num_functions, subset_functions, num_clients, params, reward_params):
         super(FunctionPlacementEnv, self).__init__()
@@ -45,7 +47,7 @@ class FunctionPlacementEnv(gym.Env):
         self.client_positions = np.random.rand(self.num_clients, 2)
         self.steps = 0
         self.episode_number += 1
-        self.visualize_map()
+        # self.visualize_map()
         state = self._get_state()
         return state.astype(np.float32), {}
 
@@ -62,17 +64,28 @@ class FunctionPlacementEnv(gym.Env):
 
     def calculate_reward(self):
         reward = 0
-        for server in range(self.num_servers):
-            for client in range(self.num_clients):
-                if self._is_within_radius(client, server) and not self._is_client_served(client):
-                    required_functions = self.client_demands[client].nonzero()[0]
-                    available_functions = self.server_functions[server, required_functions].sum()
-                    total_required = len(required_functions)
-                    partial_score = available_functions / total_required
-                    if partial_score > 0:
-                        self.client_served[client, server] = 1
-                        self.server_load[server] += partial_score / self.weights[server]
-                        reward += partial_score / self.weights[server]
+        for client in range(self.num_clients):
+            client_served_functions = []
+            required_functions = self.client_demands[client].nonzero()[0]
+            for server in np.random.permutation(self.num_servers):
+                if len(client_served_functions) == self.subset_functions: break
+                if self._is_within_radius(client, server):
+                    for f in required_functions:
+                        if f in client_served_functions:
+                            continue
+                        if self.server_functions[server, f] == 1:
+                            client_served_functions.append(f)
+                            self.client_served[client, server] += 1
+                            self.server_load[server] += 1 / self.weights[server]
+                            reward += 1 / self.weights[server] # If results won't be good, maybe add the dict to the observation space.
+
+                    # available_functions = self.server_functions[server, required_functions].sum()
+                    # total_required = len(required_functions)
+                    # partial_score = available_functions / total_required
+                    # if partial_score > 0:
+                    #     self.client_served[client, server] = #function
+                    #     self.server_load[server] += partial_score / self.weights[server]
+                    #     reward += partial_score / self.weights[server]
         overloaded_servers = (self.server_load > self.weights)
         reward -= np.sum(overloaded_servers) * self.reward_params['overload_penalty']
         load_variance = np.var(self.server_load)
@@ -111,8 +124,10 @@ class FunctionPlacementEnv(gym.Env):
         distance = np.linalg.norm(client_pos - server_pos)
         return distance <= self.radius
 
-    def _is_client_served(self, client):
-        return np.any(self.client_served[client, :])
+    def _is_client_served(self, client, clients_served_functions):
+        if client not in clients_served_functions:
+            return False
+        return len(clients_served_functions[client]) ==  self.subset_functions
 
     def visualize_map(self):
         plt.figure(figsize=(10, 8))
@@ -134,5 +149,5 @@ class FunctionPlacementEnv(gym.Env):
         plt.title(f'Server Locations with Coverage Radius and Server Weights - Episode {self.episode_number}')
         plt.legend(loc='upper right')
         plt.grid(True)
-        plt.savefig(f"/home/barak/PycharmProjects/dynamicVNFDRL/visual/episode_{self.episode_number}.png")
+        # plt.savefig(f"/home/barak/PycharmProjects/dynamicVNFDRL/visual/episode_{self.episode_number}.png")
         plt.close()

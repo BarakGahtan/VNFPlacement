@@ -10,7 +10,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
 from rl_folder.env import FunctionPlacementEnv
 from rl_folder.utils import TensorboardCallback
-from utils import input_parser
+from utils1 import input_parser
 import optuna
 from torch.utils.tensorboard import SummaryWriter
 
@@ -69,7 +69,7 @@ def objective(trial, env_params, n_episodes=100, n_steps=100):
     env = VecNormalize(env, norm_obs=True, norm_reward=True)
 
     # Define evaluation environment and callback
-    eval_env = DummyVecEnv([lambda: Monitor(FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 1, 'variance_penalty': 1}))])
+    eval_env = DummyVecEnv([lambda: Monitor(FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 25, 'variance_penalty': 1}))])
     eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=True)
     eval_callback = EvalCallback(eval_env, best_model_save_path='./logs/best_model/',
                                  log_path='./logs/', eval_freq=500,
