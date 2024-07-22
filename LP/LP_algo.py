@@ -1,3 +1,5 @@
+import random
+
 import pulp
 import numpy as np
 from matplotlib import pyplot as plt
@@ -21,16 +23,17 @@ from utils1.utils_functions import calculate_radius
 
 
 # LP function without rounding
-def not_rounded_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
+def fractional_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
     prob = pulp.LpProblem("Function_Placement", pulp.LpMaximize)
 
     x = pulp.LpVariable.dicts("x", ((i, j) for i in range(num_servers) for j in range(num_functions)), 0, 1, pulp.LpContinuous)
-    y = pulp.LpVariable.dicts("y", ((c, s) for c in range(num_clients) for s in range(num_servers)), 0, 1, pulp.LpContinuous)
+    z = pulp.LpVariable.dicts("z", ((c, s) for c in range(num_clients) for s in range(num_functions)), 0, 1, pulp.LpContinuous)
+    y = pulp.LpVariable.dicts("y", ((c, s) for c in range(num_clients) for s in range(num_servers)), 0, 2, pulp.LpContinuous)
 
     prob += pulp.lpSum([y[c, s] for c in range(num_clients) for s in range(num_servers)])
 
     for s in range(num_servers):
-        prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) == 1, f"Function_Placement_Constraint_Server_{s}"
+        prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) <= 2, f"Function_Placement_Constraint_Server_{s}"
 
     for s in range(num_servers):
         prob += pulp.lpSum([y[c, s] for c in range(num_clients)]) <= weights[s], f"Capacity_Constraint_Server_{s}"
@@ -47,19 +50,19 @@ def not_rounded_linear_programming(num_servers, num_functions, num_clients, weig
         if value > 0:
             placements[s].append((f, value))
 
-    return placements
+    return placements, pulp.value(prob.objective)
 
 # LP function with rounding
 def rounded_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
     prob = pulp.LpProblem("Function_Placement", pulp.LpMaximize)
 
     x = pulp.LpVariable.dicts("x", ((i, j) for i in range(num_servers) for j in range(num_functions)), 0, 1, pulp.LpContinuous)
-    y = pulp.LpVariable.dicts("y", ((c, s) for c in range(num_clients) for s in range(num_servers)), 0, 1, pulp.LpContinuous)
+    y = pulp.LpVariable.dicts("y", ((c, s) for c in range(num_clients) for s in range(num_servers)), 0, 2, pulp.LpContinuous)
 
     prob += pulp.lpSum([y[c, s] for c in range(num_clients) for s in range(num_servers)])
 
     for s in range(num_servers):
-        prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) == 1, f"Function_Placement_Constraint_Server_{s}"
+        prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) <= 2, f"Function_Placement_Constraint_Server_{s}"
 
     for s in range(num_servers):
         prob += pulp.lpSum([y[c, s] for c in range(num_clients)]) <= weights[s], f"Capacity_Constraint_Server_{s}"
@@ -73,18 +76,26 @@ def rounded_linear_programming(num_servers, num_functions, num_clients, weights,
     results = {(s, f): round(pulp.value(x[s, f])) for s in range(num_servers) for f in range(num_functions)}
     client_served_by_server = {(c, s): round(pulp.value(y[c, s])) for c in range(num_clients) for s in range(num_servers)}
 
+    # Extract results and round probabilistically
+    results = {(s, f): pulp.value(x[s, f]) for s in range(num_servers) for f in range(num_functions)}
+    client_served_by_server = {(c, s): pulp.value(y[c, s]) for c in range(num_clients) for s in range(num_servers)}
+    server_placements_arr = np.array([[pulp.value(x[s, f]) for s in range(num_servers)] for f in range(num_functions)])
+    prob_array = np.random.rand(num_servers, num_functions)
+    arr = (server_placements_arr > prob_array).astype(int)
     placements = {s: [] for s in range(num_servers)}
     for (s, f), value in results.items():
-        if value == 1:
+        if random.random() < value:  # Probabilistic rounding
             placements[s].append(f)
 
-    return placements, client_served_by_server
+    rounded_client_served_by_server = {(c, s): 1 if random.random() < value else 0 for (c, s), value in client_served_by_server.items()}
+
+    return placements, rounded_client_served_by_server
 
 
 
 def call_LP_solvers(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
 # Call the linear programming functions
-    placements_not_rounded = not_rounded_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands)
+    placements_not_rounded = fractional_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands)
     placements_rounded, client_served_by_server = rounded_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions,
                                                                          client_demands)
 

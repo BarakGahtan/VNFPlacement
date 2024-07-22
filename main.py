@@ -8,6 +8,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.monitor import Monitor
+
+from LP.LP_algo import call_LP_solvers
 from rl_folder.env import FunctionPlacementEnv
 from rl_folder.utils import TensorboardCallback
 from utils1 import input_parser
@@ -63,6 +65,7 @@ def objective(trial, env_params, n_episodes=100, n_steps=100):
     clip_range = trial.suggest_float('clip_range', 0.1, 0.3)
 
     # Create the environment
+
     env = FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 1, 'variance_penalty': 1})  # Default reward params
     env = Monitor(env)  # Wrap the environment with Monitor
     env = DummyVecEnv([lambda: env])
@@ -116,7 +119,8 @@ if __name__ == "__main__":
         'num_clients': opts.clients_cnt,
         'params': opts
     }
-
+    env = FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 1, 'variance_penalty': 1})  # Default reward params
+    call_LP_solvers(env.num_servers,env.num_functions, env.num_clients,env.weights,env.radius,env.client_positions,env.server_positions,env.client_demands)
     # Perform hyperparameter optimization using Optuna
     study = optuna.create_study(direction='maximize')
     study.optimize(lambda trial: objective(trial, env_params, n_episodes=opts.episode_count, n_steps=opts.steps_count), n_trials=20)
