@@ -27,20 +27,32 @@ def fractional_linear_programming(num_servers, num_functions, num_clients, weigh
     prob = pulp.LpProblem("Function_Placement", pulp.LpMaximize)
 
     x = pulp.LpVariable.dicts("x", ((i, j) for i in range(num_servers) for j in range(num_functions)), 0, 1, pulp.LpContinuous)
-    z = pulp.LpVariable.dicts("z", ((c, s) for c in range(num_clients) for s in range(num_functions)), 0, 1, pulp.LpContinuous)
-    y = pulp.LpVariable.dicts("y", ((c, s) for c in range(num_clients) for s in range(num_servers)), 0, 2, pulp.LpContinuous)
+    z = pulp.LpVariable.dicts("z", ((c, f) for c in range(num_clients) for f in range(num_functions)), 0, 1, pulp.LpContinuous)
+    y = pulp.LpVariable.dicts("y", ((c, s, f) for c in range(num_clients) for s in range(num_servers) for f in range(num_functions)), 0, 1, pulp.LpContinuous)
 
-    prob += pulp.lpSum([y[c, s] for c in range(num_clients) for s in range(num_servers)])
+    prob += pulp.lpSum([z[c, f] for c in range(num_clients) for f in range(num_functions)])
 
     for s in range(num_servers):
         prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) <= 2, f"Function_Placement_Constraint_Server_{s}"
 
+
+    for c in range(num_clients):
+        for f in range(num_functions):
+            max_value = 1 if f in client_demands[c] else 0
+            prob += z[c, f] <= max_value, f"Client_Function_Constraint_{c}_{f}"
+
     for s in range(num_servers):
-        prob += pulp.lpSum([y[c, s] for c in range(num_clients)]) <= weights[s], f"Capacity_Constraint_Server_{s}"
+        prob += pulp.lpSum([y[c, s, f] for c in range(num_clients) for f in range(num_functions)]) <= weights[s], f"Capacity_Constraint_Server_{s}"
 
     for c in range(num_clients):
         for s in range(num_servers):
-            prob += y[c, s] <= pulp.lpSum([x[s, f] for f in client_demands[c] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius]), f"Client_Demand_Constraint_{c}_{s}"
+            for f in client_demands[c]:
+                max_value = x[s, f] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius else 0
+                prob += y[c, s, f] <= max_value, f"Client_Function_Constraint_{c}_{s}_{f}"
+
+    for c in range(num_clients):
+        for f in client_demands[f]:
+            prob += z[c,f] < pulp.lpSum([y[c, s, f] for s in range(num_servers)]), f"Client_Function_Constraint_{c}_{f}"
 
     prob.solve()
 
@@ -57,39 +69,46 @@ def rounded_linear_programming(num_servers, num_functions, num_clients, weights,
     prob = pulp.LpProblem("Function_Placement", pulp.LpMaximize)
 
     x = pulp.LpVariable.dicts("x", ((i, j) for i in range(num_servers) for j in range(num_functions)), 0, 1, pulp.LpContinuous)
-    y = pulp.LpVariable.dicts("y", ((c, s) for c in range(num_clients) for s in range(num_servers)), 0, 2, pulp.LpContinuous)
+    z = pulp.LpVariable.dicts("z", ((c, f) for c in range(num_clients) for f in range(num_functions)), 0, 1, pulp.LpContinuous)
+    y = pulp.LpVariable.dicts("y", ((c, s, f) for c in range(num_clients) for s in range(num_servers) for f in range(num_functions)), 0, 1, pulp.LpContinuous)
 
-    prob += pulp.lpSum([y[c, s] for c in range(num_clients) for s in range(num_servers)])
+    prob += pulp.lpSum([z[c, f] for c in range(num_clients) for f in range(num_functions)])
 
     for s in range(num_servers):
         prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) <= 2, f"Function_Placement_Constraint_Server_{s}"
 
+    for c in range(num_clients):
+        for f in range(num_functions):
+            max_value = 1 if f in client_demands[c] else 0
+            prob += z[c, f] <= max_value, f"Client_Function_Constraint_{c}_{f}"
+
     for s in range(num_servers):
-        prob += pulp.lpSum([y[c, s] for c in range(num_clients)]) <= weights[s], f"Capacity_Constraint_Server_{s}"
+        prob += pulp.lpSum([y[c, s, f] for c in range(num_clients) for f in range(num_functions)]) <= weights[s], f"Capacity_Constraint_Server_{s}"
 
     for c in range(num_clients):
         for s in range(num_servers):
-            prob += y[c, s] <= pulp.lpSum([x[s, f] for f in client_demands[c] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius]), f"Client_Demand_Constraint_{c}_{s}"
+            for f in client_demands[c]:
+                max_value = x[s, f] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius else 0
+                prob += y[c, s, f] <= max_value, f"Client_Function_Constraint_{c}_{s}_{f}"
+
+    for c in range(num_clients):
+        for f in client_demands[f]:
+            prob += z[c, f] < pulp.lpSum([y[c, s, f] for s in range(num_servers)]), f"Client_Function_Constraint_{c}_{f}"
 
     prob.solve()
 
-    results = {(s, f): round(pulp.value(x[s, f])) for s in range(num_servers) for f in range(num_functions)}
-    client_served_by_server = {(c, s): round(pulp.value(y[c, s])) for c in range(num_clients) for s in range(num_servers)}
-
     # Extract results and round probabilistically
-    results = {(s, f): pulp.value(x[s, f]) for s in range(num_servers) for f in range(num_functions)}
-    client_served_by_server = {(c, s): pulp.value(y[c, s]) for c in range(num_clients) for s in range(num_servers)}
+    client_served_by_server = {(c, s, f): pulp.value(y[c, s]) for c in range(num_clients) for s in range(num_servers)}
     server_placements_arr = np.array([[pulp.value(x[s, f]) for s in range(num_servers)] for f in range(num_functions)])
-    prob_array = np.random.rand(num_servers, num_functions)
-    arr = (server_placements_arr > prob_array).astype(int)
-    placements = {s: [] for s in range(num_servers)}
-    for (s, f), value in results.items():
-        if random.random() < value:  # Probabilistic rounding
-            placements[s].append(f)
+    while True:
+        prob_array = np.random.rand(num_servers, num_functions)
+        placements = (server_placements_arr >= prob_array).astype(int)
+        if np.all(np.sum(placements, axis=0) <= 2):
+            break
 
-    rounded_client_served_by_server = {(c, s): 1 if random.random() < value else 0 for (c, s), value in client_served_by_server.items()}
+    rounded_client_served_by_server = {(c, s, f): 1 if random.random() < value and placements[s, f] == 1 else 0 for (c, s, f), value in client_served_by_server.items()}
 
-    return placements, rounded_client_served_by_server
+    return placements, rounded_client_served_by_server, sum(rounded_client_served_by_server.values())
 
 
 

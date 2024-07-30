@@ -27,7 +27,10 @@ class Parser(object):
         parser_.add_argument('-f', '--possible_func', default=5,  type=int, help='number of functions')
         parser_.add_argument('-n', '--clients_cnt', default=500,  type=int, help='number of clients')
         parser_.add_argument('-w', '--w1', default=5, type=int, help='lower limit for weights range')
-        parser_.add_argument('-ww', '--w2', default=20, type=int, help='upper limit for weights range')
-        parser_.add_argument('-r', '--radius', default=15, type=int, help='upper limit for weights range')
+        parser_.add_argument('-ww', '--w2', default=12, type=int, help='upper limit for weights range')
+        parser_.add_argument('-r', '--radius', default=15, type=int, help='percentage of diameter in the graph')
         args = parser_.parse_args()
         return args
+##Approcate ratio for client-server-demand##
+## servercount = 25, function = 5, client = 500, demanded function = 2, weight = 5-20, radius = 15# --> total demand == 1000. 1000 < total served < 1250 ->
+##
