@@ -32,5 +32,5 @@ class Parser(object):
         args = parser_.parse_args()
         return args
 ##Approcate ratio for client-server-demand##
-## servercount = 25, function = 5, client = 500, demanded function = 2, weight = 5-20, radius = 15# --> total demand == 1000. 1000 < total served < 1250 ->
+## servercount = 25, function = 5, client = 500, demanded function = 2, weight = 5-12, radius = 15# --> total demand == 1000. 1000 < total served < 1250 ->
 ##
