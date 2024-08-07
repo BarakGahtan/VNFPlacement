@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from torch_geometric.nn import GCNConv, MessagePassing
 from torch_geometric.data import Data
-from torch.optim import Adam
+from torch.optim import Adam, lr_scheduler
 import numpy as np
 
 from utils1.utils_functions import create_clients_demand, calculate_radius
@@ -149,9 +150,12 @@ def aggregate_solutions(solutions, num_servers, num_clients):
 def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, client_demands):
     num_clusters = int(params['num_servers'] / 5) # Example number of clusters
 
-    model = GNNClustering(in_channels=server_positions.shape[1] + 1, out_channels=num_clusters, num_servers=params['num_servers'], num_clients=params['num_clients'])
+    model = GNNClustering(in_channels=server_positions.shape[1] + 1, out_channels=num_clusters, num_servers=params['num_servers'],
+                          num_clients=params['num_clients'])
     optimizer = Adam(model.parameters(), lr=0.01)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
+    losses = []
     model.train()
     for epoch in range(params['params'].epochs):  # Training epochs
         client_positions = np.random.rand(params['num_clients'], 2)  # Update client positions each epoch
@@ -162,6 +166,22 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
                           torch.tensor(server_positions, dtype=torch.float32), radius, torch.tensor(server_weights, dtype=torch.float32))
         loss.backward()
         optimizer.step()
+        scheduler.step()
+        losses.append(loss.item())
+
+        if epoch % 10 == 0:  # Print every 10 epochs
+            print(f'Epoch {epoch}, Loss: {loss.item()}')
+
+    # Save the model
+    torch.save(model.state_dict(), 'gnn_clustering_model.pth')
+
+    # Plot the training loss
+    plt.figure(figsize=(10, 5))
+    plt.plot(losses)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training Loss Over Epochs')
+    plt.show()
 
     model.eval()
     client_positions = np.random.rand(params['num_clients'], 2)  # Final client positions
