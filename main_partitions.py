@@ -1,5 +1,7 @@
 import numpy as np
 import torch
+
+from partition_model import cluster_and_solve_dynamic
 from utils1 import input_parser
 from utils1.utils_functions import calculate_radius, visualize_map, create_clients_demand
 
@@ -23,4 +25,5 @@ if __name__ == "__main__":
     weights = np.random.uniform(params['params'].w1 / 100 * params['num_clients'], params['params'].w2 / 100 * params['num_clients'], params['num_servers']).astype(int)
     client_positions = np.random.rand(params['num_clients'], 2)
     visualize_map(weights,server_positions,client_positions,radius)
+    cluster_and_solve_dynamic(params, server_positions, radius, weights, client_demands)
     print("done")

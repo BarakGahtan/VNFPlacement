@@ -22,7 +22,7 @@ class Parser(object):
         parser_.add_argument('-lr', '--lr_schedule', default=1e-4, type=float, help='learning rate')
         parser_.add_argument('-e', '--episode_count', default=30, type=int, help='number of episode to train')
         parser_.add_argument('-ee', '--epochs', default=100, type=int, help='number of episode to train')
-        parser_.add_argument('-sc', '--steps_count', default=2048, type=int, help='number of steps per episode')
+        parser_.add_argument('-sc', '--steps_count', default=4096, type=int, help='number of steps per episode')
         parser_.add_argument('-m', '--servers_cnt', default=25, type=int, help='number of servers')
         parser_.add_argument('-k', '--demanded_func', default=2, type=int, help='number of functions')
         parser_.add_argument('-f', '--possible_func', default=5,  type=int, help='number of functions')

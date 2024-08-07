@@ -15,6 +15,12 @@ from rl_folder.utils import TensorboardCallback
 from utils1 import input_parser
 import optuna
 from torch.utils.tensorboard import SummaryWriter
+from enum import Enum
+
+
+class TrainingMode(Enum):
+    OPTUNA = 1
+    SINGLE_INSTANCE = 2
 
 
 class CustomRewardCallback(BaseCallback):
@@ -66,7 +72,7 @@ def objective(trial, env_params, n_episodes=100, n_steps=100):
 
     # Create the environment
 
-    env = FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 1, 'variance_penalty': 1})  # Default reward params
+    env = FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 25, 'variance_penalty': 1})  # Default reward params
     env = Monitor(env)  # Wrap the environment with Monitor
     env = DummyVecEnv([lambda: env])
     env = VecNormalize(env, norm_obs=True, norm_reward=True)
@@ -75,7 +81,7 @@ def objective(trial, env_params, n_episodes=100, n_steps=100):
     eval_env = DummyVecEnv([lambda: Monitor(FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 25, 'variance_penalty': 1}))])
     eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=True)
     eval_callback = EvalCallback(eval_env, best_model_save_path='./logs/best_model/',
-                                 log_path='./logs/', eval_freq=500,
+                                 log_path='./logs/', eval_freq=2048,
                                  deterministic=True, render=False)
 
     # Initialize the PPO model with suggested hyperparameters
@@ -107,7 +113,51 @@ def objective(trial, env_params, n_episodes=100, n_steps=100):
     return mean_reward
 
 
-if __name__ == "__main__":
+def train_single_instance(env_params, n_episodes=100, n_steps=2048, **kwargs):
+    # Default hyperparameters for single instance training
+    learning_rate = kwargs.get('learning_rate', 3e-4)
+    batch_size = kwargs.get('batch_size', 128)
+    gamma = kwargs.get('gamma', 0.99)
+    gae_lambda = kwargs.get('gae_lambda', 0.95)
+    clip_range = kwargs.get('clip_range', 0.2)
+
+    # Create the environment
+    env = FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 15, 'variance_penalty': 1})
+    env = Monitor(env)
+    env = DummyVecEnv([lambda: env])
+    env = VecNormalize(env, norm_obs=True, norm_reward=True)
+
+    # Define evaluation environment and callback
+    eval_env = DummyVecEnv([lambda: Monitor(FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 15, 'variance_penalty': 1}))])
+    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=True)
+    eval_callback = EvalCallback(eval_env, best_model_save_path='./logs/best_model_single/',
+                                 log_path='./logs/', eval_freq=2048,
+                                 deterministic=True, render=False)
+    n_steps = 2048
+    n_episodes = 50
+    # Initialize the PPO model with default hyperparameters
+    model = PPO('MlpPolicy', env,
+                learning_rate=learning_rate,
+                batch_size=batch_size,
+                n_steps=n_steps,
+                gamma=gamma,
+                gae_lambda=gae_lambda,
+                clip_range=clip_range,
+                verbose=1, tensorboard_log='./logs_single/')
+
+    # Train the model with custom reward callback
+    custom_reward_callback = CustomRewardCallback()
+    model.learn(total_timesteps=n_episodes * n_steps, callback=[eval_callback, custom_reward_callback])
+
+    # Evaluate the model
+    mean_reward, std_reward = evaluate_model(env, model, n_episodes=10)
+
+    print(f"Mean reward: {mean_reward}, Std reward: {std_reward}")
+
+    return model
+
+
+def main():
     parsed_args = input_parser.Parser()
     opts = parsed_args.parse()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -119,36 +169,48 @@ if __name__ == "__main__":
         'num_clients': opts.clients_cnt,
         'params': opts
     }
-    env = FunctionPlacementEnv(**env_params, reward_params={'overload_penalty': 1, 'variance_penalty': 1})  # Default reward params
-    # call_LP_solvers(env.num_servers,env.num_functions, env.num_clients,env.weights,env.radius,env.client_positions,env.server_positions,env.client_demands)
-    # Perform hyperparameter optimization using Optuna
-    study = optuna.create_study(direction='maximize')
-    study.optimize(lambda trial: objective(trial, env_params, n_episodes=opts.episode_count, n_steps=opts.steps_count), n_trials=10)
 
-    print(f"Best trial: {study.best_trial.value}")
-    print(f"Best hyperparameters: {study.best_trial.params}")
+    mode = TrainingMode.SINGLE_INSTANCE  # Change this to switch modes SINGLE_INSTANCE OPTUNA
 
-    # Use the best hyperparameters found by Optuna for further training or testing
-    best_hyperparams = study.best_trial.params
+    if mode == TrainingMode.OPTUNA:
+        # Perform hyperparameter optimization using Optuna
+        study = optuna.create_study(direction='maximize')
+        study.optimize(lambda trial: objective(trial, env_params, n_episodes=opts.episode_count, n_steps=opts.steps_count), n_trials=10)
 
-    # Visualization
-    df = pd.DataFrame(study.trials_dataframe())
+        print(f"Best trial: {study.best_trial.value}")
+        print(f"Best hyperparameters: {study.best_trial.params}")
 
-    plt.figure(figsize=(10, 8))
-    plt.plot(df['number'], df['value'])
-    plt.xlabel('Trial Number')
-    plt.ylabel('Mean Reward')
-    plt.title('Optimization Progress')
-    plt.grid(True)
-    plt.savefig('optuna_optimization_results.png')
-    plt.show()
+        # Use the best hyperparameters found by Optuna for further training or testing
+        best_hyperparams = study.best_trial.params
+
+        # Visualization
+        df = pd.DataFrame(study.trials_dataframe())
+
+        plt.figure(figsize=(10, 8))
+        plt.plot(df['number'], df['value'])
+        plt.xlabel('Trial Number')
+        plt.ylabel('Mean Reward')
+        plt.title('Optimization Progress')
+        plt.grid(True)
+        plt.savefig('optuna_optimization_results.png')
+        plt.show()
+
+    elif mode == TrainingMode.SINGLE_INSTANCE:
+        # Train with a single set of hyperparameters
+        model = train_single_instance(env_params, n_episodes=opts.episode_count, n_steps=opts.steps_count)
+        # Save the trained model if needed
+        model.save("ppo_single_instance_model")
 
     # Open TensorBoard for the final log directory used
-    final_log_dir = f"./logs/best_model/"
-    tensorboard_command = f"tensorboard --logdir={final_log_dir} --host=127.0.0.1 --port=6006"
+    final_log_dir = f"./logs/best_model/" if mode == TrainingMode.OPTUNA else f"./logs_single/"
+    tensorboard_command = f"tensorboard --logdir={final_log_dir} --host=127.0.0.1 --port=6016"
     final_tensorboard_process = subprocess.Popen(tensorboard_command, shell=True)
-    print(f"TensorBoard is running at http://127.0.0.1:6006")
+    print(f"TensorBoard is running at http://127.0.0.1:6016")
 
     # Wait for user input to close TensorBoard
     input("Press Enter to close TensorBoard...")
     final_tensorboard_process.terminate()
+
+
+if __name__ == "__main__":
+    main()

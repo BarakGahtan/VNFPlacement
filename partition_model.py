@@ -146,14 +146,14 @@ def aggregate_solutions(solutions, num_servers, num_clients):
 # torch.randint(0, num_clusters, (params['num_clients'],)). This is a placeholder and assumes that during training, you have some way to assign initial cluster labels to the clients.
 
 
-def cluster_and_solve_dynamic(opts, params, server_positions, radius, server_weights, client_demands):
-    num_clusters = int(opts['num_servers'] / 5) # Example number of clusters
+def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, client_demands):
+    num_clusters = int(params['num_servers'] / 5) # Example number of clusters
 
     model = GNNClustering(in_channels=server_positions.shape[1] + 1, out_channels=num_clusters, num_servers=params['num_servers'], num_clients=params['num_clients'])
     optimizer = Adam(model.parameters(), lr=0.01)
 
     model.train()
-    for epoch in range(opts['params'].epochs):  # Training epochs
+    for epoch in range(params['params'].epochs):  # Training epochs
         client_positions = np.random.rand(params['num_clients'], 2)  # Update client positions each epoch
         data = prepare_graph_data(server_positions, client_positions, server_weights, radius)
         optimizer.zero_grad()
