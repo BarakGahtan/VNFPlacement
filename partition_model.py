@@ -8,6 +8,7 @@ from torch_geometric.data import Data
 from torch.optim import Adam, lr_scheduler
 import numpy as np
 
+from LP.LP_algo import fractional_linear_programming
 from utils1.utils_functions import create_clients_demand, calculate_radius
 
 
@@ -192,11 +193,25 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
 
 
     solutions = []
-    # for cluster_id in range(num_clusters):
-    #     client_indices = np.where(client_clusters == cluster_id)[0]
-    #     client_demands_cluster = client_demands[client_indices, :]
-    #     solution = solve_lp_for_cluster(server_positions, client_demands_cluster, server_weights)  # solve the LP problem
-    #     solutions.append(solution)
-
-    final_solution = aggregate_solutions(solutions, num_servers, num_clients)
+    for cluster_id in range(num_clusters):
+        client_indices = np.where(client_clusters == cluster_id)[0]
+        client_demands_cluster = client_demands[client_indices, :]
+        # solution = fractional_linear_programming(params['num_servers'], params['num_functions'], params['num_clients'], server_weights, radius, client_positions, server_positions, client_demands)  # solve the LP problem
+        solutions.append(solution)
+    final_solution = aggregate_solutions(solutions, params['num_servers'], params['num_clients'])
     return final_solution
+
+# Cluster Assignments:
+# The GNN model produces a tensor where each row corresponds to a node (either a client or a server) and each column corresponds to a cluster.
+# The values in this tensor represent the logits (unnormalized scores) for each cluster.
+# By applying argmax to these logits along the columns, we can determine the most likely cluster for each node.
+# This gives us the cluster assignments for both clients and servers.
+# Using the Output Client and Server Cluster Assignments:
+# Client Clusters: The cluster assignments for the clients are used to partition the clients into different sub-problems, each corresponding to a cluster.
+# Server Clusters: The cluster assignments for the servers help in understanding the groupings of servers, but primarily, the client clusters are used to solve the sub-problems.
+# Solving LP for Clusters:
+# For each client cluster, a smaller LP problem is formulated and solved. This LP problem considers only the clients within the cluster and their demands.
+# The server capacities and positions are taken into account when solving these sub-problems.
+# Aggregating Solutions:
+# The solutions from the individual LP problems are then aggregated to form the final solution. This aggregation process combines the results
+# from each cluster to ensure that all client demands are met in an optimal manner.
