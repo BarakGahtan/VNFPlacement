@@ -47,7 +47,7 @@ class FunctionPlacementEnv(gym.Env):
         self.client_positions = np.random.rand(self.num_clients, 2)
         self.steps = 0
         self.episode_number += 1
-        # self.visualize_map()
+        self.visualize_map()
         state = self._get_state()
         return state.astype(np.float32), {}
 
@@ -149,5 +149,6 @@ class FunctionPlacementEnv(gym.Env):
         plt.title(f'Server Locations with Coverage Radius and Server Weights - Episode {self.episode_number}')
         plt.legend(loc='upper right')
         plt.grid(True)
+        plt.show()
         # plt.savefig(f"/home/barak/PycharmProjects/dynamicVNFDRL/visual/episode_{self.episode_number}.png")
         plt.close()
