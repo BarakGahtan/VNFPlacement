@@ -7,7 +7,7 @@ from torch_geometric.nn import GCNConv, MessagePassing
 from torch_geometric.data import Data
 from torch.optim import Adam, lr_scheduler
 import numpy as np
-
+from sklearn.manifold import TSNE
 from LP.LP_algo import fractional_linear_programming
 from utils1.utils_functions import create_clients_demand, calculate_radius
 
@@ -156,7 +156,7 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
     optimizer = Adam(model.parameters(), lr=0.01)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-    losses = []
+    losses, embeddings = [], []
     model.train()
     for epoch in range(params['params'].epochs):  # Training epochs
         client_positions = np.random.rand(params['num_clients'], 2)  # Update client positions each epoch
@@ -169,12 +169,26 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
         optimizer.step()
         scheduler.step()
         losses.append(loss.item())
-
+        embeddings.append(output.detach().cpu().numpy())
         if epoch % 10 == 0:  # Print every 10 epochs
             print(f'Epoch {epoch}, Loss: {loss.item()}')
 
     # Save the model
     torch.save(model.state_dict(), 'gnn_clustering_model.pth')
+
+    # Visualize the final embeddings
+    final_embeddings = embeddings[-1]
+    tsne = TSNE(n_components=2)
+    reduced_embeddings = tsne.fit_transform(final_embeddings)
+    plt.figure(figsize=(10, 5))
+    plt.scatter(reduced_embeddings[:params['num_clients'], 0], reduced_embeddings[:params['num_clients'], 1], c=client_clusters, cmap='viridis', label='Clients')
+    plt.scatter(reduced_embeddings[params['num_clients']:, 0], reduced_embeddings[params['num_clients']:, 1], c='red', label='Servers')
+    plt.legend()
+    plt.xlabel('Component 1')
+    plt.ylabel('Component 2')
+    plt.title('2D Visualization of Node Embeddings')
+    plt.show()
+
 
     # Plot the training loss
     plt.figure(figsize=(10, 5))
