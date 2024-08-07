@@ -149,7 +149,7 @@ def aggregate_solutions(solutions, num_servers, num_clients):
 
 
 def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, client_demands):
-    num_clusters = int(params['num_servers'] / 5) # Example number of clusters
+    num_clusters = int(params['num_servers'] / 5)  # Example number of clusters
 
     model = GNNClustering(in_channels=server_positions.shape[1] + 1, out_channels=num_clusters, num_servers=params['num_servers'],
                           num_clients=params['num_clients'])
@@ -176,20 +176,6 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
     # Save the model
     torch.save(model.state_dict(), 'gnn_clustering_model.pth')
 
-    # Visualize the final embeddings
-    final_embeddings = embeddings[-1]
-    tsne = TSNE(n_components=2)
-    reduced_embeddings = tsne.fit_transform(final_embeddings)
-    plt.figure(figsize=(10, 5))
-    plt.scatter(reduced_embeddings[:params['num_clients'], 0], reduced_embeddings[:params['num_clients'], 1], c=client_clusters, cmap='viridis', label='Clients')
-    plt.scatter(reduced_embeddings[params['num_clients']:, 0], reduced_embeddings[params['num_clients']:, 1], c='red', label='Servers')
-    plt.legend()
-    plt.xlabel('Component 1')
-    plt.ylabel('Component 2')
-    plt.title('2D Visualization of Node Embeddings')
-    plt.show()
-
-
     # Plot the training loss
     plt.figure(figsize=(10, 5))
     plt.plot(losses)
@@ -203,15 +189,38 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
     data = prepare_graph_data(server_positions, client_positions, server_weights, radius)
     cluster_assignments = model(data.x, data.edge_index).argmax(dim=1)
     client_clusters = cluster_assignments[:params['num_clients']]  # Client cluster assignments
+    server_clusters = cluster_assignments[params['num_clients']:]  # Server cluster assignments
 
 
+    # Visualize the final embeddings
+    final_embeddings = embeddings[-1]
+    tsne = TSNE(n_components=2)
+    reduced_embeddings = tsne.fit_transform(final_embeddings)
+
+    plt.figure(figsize=(10, 5))
+    plt.scatter(reduced_embeddings[:params['num_clients'], 0], reduced_embeddings[:params['num_clients'], 1], c=client_clusters, cmap='viridis', label='Clients')
+    plt.scatter(reduced_embeddings[params['num_clients']:, 0], reduced_embeddings[params['num_clients']:, 1], c='red', label='Servers')
+    plt.legend()
+    plt.xlabel('Component 1')
+    plt.ylabel('Component 2')
+    plt.title('2D Visualization of Node Embeddings')
+    plt.show()
 
     solutions = []
     for cluster_id in range(num_clusters):
         client_indices = np.where(client_clusters == cluster_id)[0]
+        server_indices = np.where(server_clusters == cluster_id)[0]
+
+        client_positions_cluster = client_positions[client_indices]
         client_demands_cluster = client_demands[client_indices, :]
-        # solution = fractional_linear_programming(params['num_servers'], params['num_functions'], params['num_clients'], server_weights, radius, client_positions, server_positions, client_demands)  # solve the LP problem
+        server_positions_cluster = server_positions[server_indices]
+        server_weights_cluster = server_weights[server_indices]
+
+        solution, _ = fractional_linear_programming(len(server_indices), params['num_functions'], len(client_indices), server_weights_cluster, radius,
+                                                    client_positions_cluster, server_positions_cluster,
+                                                    client_demands_cluster)  # solve the LP problem
         solutions.append(solution)
+
     final_solution = aggregate_solutions(solutions, params['num_servers'], params['num_clients'])
     return final_solution
 
