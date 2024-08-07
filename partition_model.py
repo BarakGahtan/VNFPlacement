@@ -42,31 +42,48 @@ class GNNClustering(nn.Module):
 
         # Cluster separation loss
         separation_loss = torch.tensor(0.0, dtype=torch.float32)
+        pair_count = 0
+        threshold_distance = radius * 1.5
         for i in range(self.num_clients):
             for j in range(i + 1, self.num_clients):
                 distance = torch.norm(client_clusters[i] - client_clusters[j])
-                separation_loss += torch.exp(-distance)
+                if distance < threshold_distance:
+                    separation_loss += torch.exp(-distance)
+                    pair_count += 1
+        separation_loss /= (pair_count if pair_count > 0 else 1)  # Normalize
 
         # Radius and server weight constraints
         radius_loss = torch.tensor(0.0, dtype=torch.float32)
+        client_server_pairs = 0
         for client_idx in range(self.num_clients):
             for server_idx in range(self.num_servers):
                 distance = torch.norm(client_positions[client_idx] - server_positions[server_idx])
                 if distance > radius:
                     radius_loss += F.mse_loss(client_clusters[client_idx], server_clusters[server_idx]) * distance
+                client_server_pairs += 1
+
+        # Encourage clients to be close to at least one server within the radius
+        for client_idx in range(self.num_clients):
+            min_distance = min([torch.norm(client_positions[client_idx] - server_positions[server_idx]) for server_idx in range(self.num_servers)])
+            if min_distance > radius:
+                radius_loss += min_distance - radius
+
+        radius_loss /= client_server_pairs  # Normalize
 
         # Server weight balance constraint
         weight_loss = torch.tensor(0.0, dtype=torch.float32)
+        server_pairs = 0
         for i in range(self.num_servers):
             for j in range(self.num_servers):
                 if i != j:
                     weight_diff = server_weights[i] - server_weights[j]
-                    weight_loss += F.mse_loss(server_clusters[i], server_clusters[j]) * weight_diff.abs()
+                    weight_loss += F.mse_loss(server_clusters[i], server_clusters[j]) * (weight_diff.abs() / server_weights.max())
+                    server_pairs += 1
+        weight_loss /= (server_pairs if server_pairs > 0 else 1)  # Normalize
 
         # Total loss
         total_loss = separation_loss + radius_loss + weight_loss
         return total_loss
-
 
 def prepare_graph_data(server_positions, client_positions, server_weights, radius):
     num_servers = server_positions.shape[0]
@@ -74,7 +91,9 @@ def prepare_graph_data(server_positions, client_positions, server_weights, radiu
 
     # Combine server positions and weights into node features
     server_features = np.hstack((server_positions, server_weights.reshape(-1, 1)))
-    client_features = client_positions
+
+    # Add a dummy column to client features to match the server features' dimension
+    client_features = np.hstack((client_positions, np.zeros((num_clients, 1))))
 
     # Normalize the features
     scaler = StandardScaler()
@@ -205,24 +224,25 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
     plt.ylabel('Component 2')
     plt.title('2D Visualization of Node Embeddings')
     plt.show()
+    return
 
-    solutions = []
-    for cluster_id in range(num_clusters):
-        client_indices = np.where(client_clusters == cluster_id)[0]
-        server_indices = np.where(server_clusters == cluster_id)[0]
+    # solutions = []
+    # for cluster_id in range(num_clusters):
+    #     client_indices = np.where(client_clusters == cluster_id)[0]
+    #     server_indices = np.where(server_clusters == cluster_id)[0]
+    #
+    #     client_positions_cluster = client_positions[client_indices]
+    #     client_demands_cluster = client_demands[client_indices, :]
+    #     server_positions_cluster = server_positions[server_indices]
+    #     server_weights_cluster = server_weights[server_indices]
+    #
+    #     solution, _ = fractional_linear_programming(len(server_indices), params['num_functions'], len(client_indices), server_weights_cluster, radius,
+    #                                                 client_positions_cluster, server_positions_cluster,
+    #                                                 client_demands_cluster)  # solve the LP problem
+    #     solutions.append(solution)
 
-        client_positions_cluster = client_positions[client_indices]
-        client_demands_cluster = client_demands[client_indices, :]
-        server_positions_cluster = server_positions[server_indices]
-        server_weights_cluster = server_weights[server_indices]
-
-        solution, _ = fractional_linear_programming(len(server_indices), params['num_functions'], len(client_indices), server_weights_cluster, radius,
-                                                    client_positions_cluster, server_positions_cluster,
-                                                    client_demands_cluster)  # solve the LP problem
-        solutions.append(solution)
-
-    final_solution = aggregate_solutions(solutions, params['num_servers'], params['num_clients'])
-    return final_solution
+    # final_solution = aggregate_solutions(solutions, params['num_servers'], params['num_clients'])
+    # return final_solution
 
 # Cluster Assignments:
 # The GNN model produces a tensor where each row corresponds to a node (either a client or a server) and each column corresponds to a cluster.
