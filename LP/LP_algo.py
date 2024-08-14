@@ -1,4 +1,5 @@
 import random
+import cvxpy as cp
 
 import pulp
 import numpy as np
@@ -121,3 +122,46 @@ def call_LP_solvers(num_servers, num_functions, num_clients, weights, radius, cl
     print("Not Rounded Placements:", placements_not_rounded)
     print("Rounded Placements:", placements_rounded)
     print("Client Served by Server:", client_served_by_server)
+
+
+def fractional_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
+    # Define the variables
+    x = cp.Variable((num_servers, num_functions), boolean=True)
+    z = cp.Variable((num_clients, num_functions), boolean=True)
+    y = cp.Variable((num_clients, num_servers, num_functions), boolean=True)
+
+    # Define the objective function
+    objective = cp.Maximize(cp.sum(z))
+
+    # Define the constraints
+    constraints = []
+
+    # Constraint: Server Function Placement Constraint
+    for s in range(num_servers):
+        constraints.append(cp.sum(x[s, :]) <= 2)
+
+    # Constraint: Client Function Demand Constraint
+    for c in range(num_clients):
+        for f in range(num_functions):
+            max_value = 1 if f in client_demands[c] else 0
+            constraints.append(z[c, f] <= max_value)
+
+    # Constraint: Server Capacity Constraint
+    for s in range(num_servers):
+        constraints.append(cp.sum(y[:, s, :]) <= weights[s])
+
+    # Constraint: Client-Server-Function Constraint (Based on Distance)
+    for c in range(num_clients):
+        for s in range(num_servers):
+            distance = np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s]))
+            for f in client_demands[c]:
+                max_value = x[s, f] if distance <= radius else 0
+                constraints.append(y[c, s, f] <= max_value)
+
+    # Constraint: Client-Function Satisfaction Constraint
+    for c in range(num_clients):
+        for f in client_demands[c]:
+            constraints.append(z[c, f] <= cp.sum(y[c, :, f]))
+
+    # Define the problem
+    prob = cp.Problem(objective, constraints)
