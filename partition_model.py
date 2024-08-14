@@ -108,7 +108,7 @@ def prepare_graph_data(server_positions, client_positions, server_weights, radiu
                 edge_index.append([i, num_clients + j])
                 edge_index.append([num_clients + j, i])
     edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-
+    # TODO: remove nodes that are not connected to anything before returning.
     # Create a list of nodes including servers and clients
     x = torch.tensor(np.vstack((client_features, server_features)), dtype=torch.float)
 
