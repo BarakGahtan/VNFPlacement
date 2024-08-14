@@ -3,9 +3,11 @@ import cvxpy as cp
 
 import pulp
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
 
-from utils1.utils_functions import calculate_radius
+from utils1 import input_parser
+from utils1.utils_functions import calculate_radius, create_clients_demand
 
 
 # x_sf is a binary variable indicating whether function f is placed on server s.
@@ -124,11 +126,14 @@ def call_LP_solvers(num_servers, num_functions, num_clients, weights, radius, cl
     print("Client Served by Server:", client_served_by_server)
 
 
-def fractional_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
+def cvxpy_fun(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
     # Define the variables
-    x = cp.Variable((num_servers, num_functions), boolean=True)
-    z = cp.Variable((num_clients, num_functions), boolean=True)
-    y = cp.Variable((num_clients, num_servers, num_functions), boolean=True)
+    # Define the variables
+    x = cp.Variable((num_servers, num_functions))
+    z = cp.Variable((num_clients, num_functions))
+
+    # y is reshaped as a 2D variable with the dimensions (num_clients, num_servers * num_functions)
+    y = cp.Variable((num_clients, num_servers * num_functions))
 
     # Define the objective function
     objective = cp.Maximize(cp.sum(z))
@@ -148,20 +153,62 @@ def fractional_linear_programming(num_servers, num_functions, num_clients, weigh
 
     # Constraint: Server Capacity Constraint
     for s in range(num_servers):
-        constraints.append(cp.sum(y[:, s, :]) <= weights[s])
+        constraints.append(cp.sum(y[:, s * num_functions:(s + 1) * num_functions]) <= weights[s])
 
     # Constraint: Client-Server-Function Constraint (Based on Distance)
     for c in range(num_clients):
         for s in range(num_servers):
             distance = np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s]))
             for f in client_demands[c]:
+                idx = s * num_functions + f
                 max_value = x[s, f] if distance <= radius else 0
-                constraints.append(y[c, s, f] <= max_value)
+                constraints.append(y[c, idx] <= max_value)
 
     # Constraint: Client-Function Satisfaction Constraint
     for c in range(num_clients):
         for f in client_demands[c]:
-            constraints.append(z[c, f] <= cp.sum(y[c, :, f]))
+            indices = [s * num_functions + f for s in range(num_servers)]
+            constraints.append(z[c, f] <= cp.sum(y[c, indices]))
 
     # Define the problem
     prob = cp.Problem(objective, constraints)
+
+    # Solve the problem
+    prob.solve()
+
+    # Extract the results
+    placements = {s: [] for s in range(num_servers)}
+    for s in range(num_servers):
+        for f in range(num_functions):
+            if x[s, f].value > 0:
+                placements[s].append((f, x[s, f].value))
+
+    return placements, prob.value
+
+
+parsed_args = input_parser.Parser()
+opts = parsed_args.parse()
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+params = {
+    'num_servers': opts.servers_cnt,
+    'num_functions': opts.possible_func,
+    'subset_functions': opts.demanded_func,
+    'num_clients': opts.clients_cnt,
+    'params': opts
+}
+client_demands = create_clients_demand(params['num_clients'], params['num_functions'], params['subset_functions'])
+server_functions = np.zeros((params['num_servers'], params['num_functions']), dtype=np.int32)
+server_load = np.zeros(params['num_servers'], dtype=np.float32)
+client_served = np.zeros((params['num_clients'], params['num_servers']), dtype=np.int32)
+server_positions = np.random.rand(params['num_servers'], 2)
+radius = calculate_radius(server_positions, fraction=params['params'].radius / 100)
+weights = np.random.uniform(params['params'].w1 / 100 * params['num_clients'], params['params'].w2 / 100 * params['num_clients'], params['num_servers']).astype(int)
+client_positions = np.random.rand(params['num_clients'], 2)
+placements, value = cvxpy_fun(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
+place_1, value_1 = fractional_linear_programming(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
+x  =5
+
+# TODO: run and compare both LP
+# TODO: write the LP in theusis and explain the constraints
+# TODO: insert it into the training loop.
+# TODO: talk to Danny about maybe additional features.

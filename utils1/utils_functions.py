@@ -2,21 +2,21 @@
 # This ensures that each server can connect to some clients but not all.
 import numpy as np
 from matplotlib import pyplot as plt
-from stable_baselines3.common.callbacks import BaseCallback
+# from stable_baselines3.common.callbacks import BaseCallback
 
 
-class TensorboardCallback(BaseCallback):
-    """
-    Custom callback for logging additional values to TensorBoard.
-    """
-    def __init__(self, verbose=0):
-        super(TensorboardCallback, self).__init__(verbose)
-
-    def _on_step(self) -> bool:
-        # Log scalar value (here the reward)
-        reward = self.locals['rewards'][0]
-        self.logger.record('reward', reward)
-        return True
+# class TensorboardCallback(BaseCallback):
+#     """
+#     Custom callback for logging additional values to TensorBoard.
+#     """
+#     def __init__(self, verbose=0):
+#         super(TensorboardCallback, self).__init__(verbose)
+#
+#     def _on_step(self) -> bool:
+#         # Log scalar value (here the reward)
+#         reward = self.locals['rewards'][0]
+#         self.logger.record('reward', reward)
+#         return True
 
 def calculate_radius(server_positions, fraction=0.5):
     # Calculate the pairwise distances between all servers
