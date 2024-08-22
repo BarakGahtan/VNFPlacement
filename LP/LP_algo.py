@@ -1,6 +1,6 @@
 import random
 import cvxpy as cp
-
+from itertools import count
 import pulp
 import numpy as np
 import torch
@@ -28,20 +28,23 @@ from utils1.utils_functions import calculate_radius, create_clients_demand
 # LP function without rounding
 def fractional_linear_programming(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
     prob = pulp.LpProblem("Function_Placement", pulp.LpMaximize)
+    unique_counter = count()
 
+    # Decision variables
     x = pulp.LpVariable.dicts("x", ((i, j) for i in range(num_servers) for j in range(num_functions)), 0, 1, pulp.LpContinuous)
     z = pulp.LpVariable.dicts("z", ((c, f) for c in range(num_clients) for f in range(num_functions)), 0, 1, pulp.LpContinuous)
     y = pulp.LpVariable.dicts("y", ((c, s, f) for c in range(num_clients) for s in range(num_servers) for f in range(num_functions)), 0, 1, pulp.LpContinuous)
 
+    # Objective function
     prob += pulp.lpSum([z[c, f] for c in range(num_clients) for f in range(num_functions)])
 
+    # Constraints
     for s in range(num_servers):
         prob += pulp.lpSum([x[s, f] for f in range(num_functions)]) <= 2, f"Function_Placement_Constraint_Server_{s}"
 
-
     for c in range(num_clients):
         for f in range(num_functions):
-            max_value = 1 if f in client_demands[c] else 0
+            max_value = client_demands[c, f]  # This directly uses the binary value from the client_demands array
             prob += z[c, f] <= max_value, f"Client_Function_Constraint_{c}_{f}"
 
     for s in range(num_servers):
@@ -49,13 +52,15 @@ def fractional_linear_programming(num_servers, num_functions, num_clients, weigh
 
     for c in range(num_clients):
         for s in range(num_servers):
-            for f in client_demands[c]:
-                max_value = x[s, f] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius else 0
-                prob += y[c, s, f] <= max_value, f"Client_Function_Constraint_{c}_{s}_{f}"
+            for f in range(num_functions):
+                if client_demands[c, f] == 1:  # Only add this constraint if the client wants the function
+                    max_value = x[s, f] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius else 0
+                    prob += y[c, s, f] <= max_value, f"Client_Server_Function_Constraint_{next(unique_counter)}"
 
     for c in range(num_clients):
-        for f in client_demands[f]:
-            prob += z[c,f] < pulp.lpSum([y[c, s, f] for s in range(num_servers)]), f"Client_Function_Constraint_{c}_{f}"
+        for f in range(num_functions):
+            if client_demands[c, f] == 1:  # Only if the client wants this function
+                prob += z[c, f] <= pulp.lpSum([y[c, s, f] for s in range(num_servers)]), f"Client_Function_Satisfaction_Constraint_{c}_{f}_{next(unique_counter)}"
 
     prob.solve()
 
@@ -92,7 +97,8 @@ def rounded_linear_programming(num_servers, num_functions, num_clients, weights,
         for s in range(num_servers):
             for f in client_demands[c]:
                 max_value = x[s, f] if np.linalg.norm(np.array(client_positions[c]) - np.array(server_positions[s])) <= radius else 0
-                prob += y[c, s, f] <= max_value, f"Client_Function_Constraint_{c}_{s}_{f}"
+                prob += y[c, s, f] <= max_value, f"Client_Function_Constraint_{c}_{s}_{f}_{c*s*f}"
+
 
     for c in range(num_clients):
         for f in client_demands[f]:
@@ -204,7 +210,7 @@ server_positions = np.random.rand(params['num_servers'], 2)
 radius = calculate_radius(server_positions, fraction=params['params'].radius / 100)
 weights = np.random.uniform(params['params'].w1 / 100 * params['num_clients'], params['params'].w2 / 100 * params['num_clients'], params['num_servers']).astype(int)
 client_positions = np.random.rand(params['num_clients'], 2)
-placements, value = cvxpy_fun(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
+# placements, value = cvxpy_fun(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
 place_1, value_1 = fractional_linear_programming(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
 x  =5
 
