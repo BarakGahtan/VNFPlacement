@@ -210,7 +210,7 @@ server_positions = np.random.rand(params['num_servers'], 2)
 radius = calculate_radius(server_positions, fraction=params['params'].radius / 100)
 weights = np.random.uniform(params['params'].w1 / 100 * params['num_clients'], params['params'].w2 / 100 * params['num_clients'], params['num_servers']).astype(int)
 client_positions = np.random.rand(params['num_clients'], 2)
-# placements, value = cvxpy_fun(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
+placements, value = cvxpy_fun(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
 place_1, value_1 = fractional_linear_programming(params['num_servers'], params['num_functions'], params['num_clients'], weights, radius, client_positions, server_positions, client_demands)
 x  =5
 
