@@ -134,7 +134,6 @@ def call_LP_solvers(num_servers, num_functions, num_clients, weights, radius, cl
 
 def cvxpy_fun(num_servers, num_functions, num_clients, weights, radius, client_positions, server_positions, client_demands):
     # Define the variables
-    # Define the variables
     x = cp.Variable((num_servers, num_functions))
     z = cp.Variable((num_clients, num_functions))
 
@@ -150,6 +149,8 @@ def cvxpy_fun(num_servers, num_functions, num_clients, weights, radius, client_p
     # Constraint: Server Function Placement Constraint
     for s in range(num_servers):
         constraints.append(cp.sum(x[s, :]) <= 2)
+        constraints.append(x[s, :] >= 0)
+        constraints.append(x[s, :] <= 1)
 
     # Constraint: Client Function Demand Constraint
     for c in range(num_clients):
