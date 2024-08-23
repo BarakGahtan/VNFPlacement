@@ -182,6 +182,8 @@ def cluster_and_solve_dynamic(params, server_positions, radius, server_weights, 
         data = prepare_graph_data(server_positions, client_positions, server_weights, radius)
         optimizer.zero_grad()
         output = model(data.x, data.edge_index)
+
+
         loss = model.loss(output, torch.tensor(client_positions, dtype=torch.float32),
                           torch.tensor(server_positions, dtype=torch.float32), radius, torch.tensor(server_weights, dtype=torch.float32))
         loss.backward()
